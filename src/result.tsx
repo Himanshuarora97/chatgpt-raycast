@@ -2,7 +2,6 @@ import {
   Action,
   ActionPanel,
   clearSearchBar,
-  Form,
   getPreferenceValues,
   Icon,
   List,
@@ -25,6 +24,31 @@ import { FullTextInput } from "./components/FullTextInput";
 import { AnswerDetailView } from "./views/answer-detail";
 import { EmptyView } from "./views/empty";
 
+type PrePrompt = { id: number; name: string };
+
+function PromptDropdown(props: {
+  promptList: PrePrompt[];
+  onPromptChange: (prompt: PrePrompt | undefined) => void;
+}) {
+  const { promptList, onPromptChange } = props;
+  return (
+    <List.Dropdown
+      tooltip="Select Prompts"
+      storeValue={true}
+      onChange={(newValue) => {
+        const prompt = promptList.find((prompt) => prompt.name == newValue);
+        onPromptChange(prompt);
+      }}
+    >
+      <List.Dropdown.Section title="Prompts">
+        {promptList.map((prompt) => (
+          <List.Dropdown.Item key={prompt.id} title={prompt.name} value={prompt.name} />
+        ))}
+      </List.Dropdown.Section>
+    </List.Dropdown>
+  );
+}
+
 export default function ChatGPT() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<ChatCompletionRequestMessage[]>([
@@ -36,6 +60,13 @@ export default function ChatGPT() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [searchText, setSearchText] = useState<string>("");
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+
+  const promptList: PrePrompt[] = [
+    { id: 1, name: "General Question" },
+    { id: 2, name: "Please improve the sentence for greater professionalism and correct any grammatical errors" },
+  ];
+
+  const [selectedDropdown, setSelectedDropdown] = useState<PrePrompt>(promptList[0]);
 
   const [chatGPT] = useState(() => {
     const apiKey = getPreferenceValues<{
@@ -137,6 +168,12 @@ export default function ChatGPT() {
   async function getAnswer(question: string) {
     setIsLoading(true);
 
+    let questionAskfromGPT = question;
+
+    if (selectedDropdown.id != 1) {
+      questionAskfromGPT = `${selectedDropdown.name} "${question}"`;
+    }
+
     const toast = await showToast({
       title: "Getting your answer...",
       style: Toast.Style.Animated,
@@ -144,7 +181,7 @@ export default function ChatGPT() {
 
     let chat: Chat = {
       id: uuidv4(),
-      question,
+      question: questionAskfromGPT,
       answer: "",
       created_at: new Date().toISOString(),
     };
@@ -171,7 +208,7 @@ export default function ChatGPT() {
     await chatGPT
       .createChatCompletion({
         model: "gpt-3.5-turbo",
-        messages: [...messages, { role: "user", content: question }],
+        messages: [...messages, { role: "user", content: questionAskfromGPT }],
       })
       .then((res) => {
         chat = { ...chat, answer: res.data.choices.map((x) => x.message)[0]?.content ?? "" };
@@ -276,6 +313,10 @@ export default function ChatGPT() {
 
   const sortedChats = chats.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+  const onPromptChange = (prompt: PrePrompt | undefined) => {
+    if (prompt != undefined) setSelectedDropdown(prompt);
+  };
+
   return (
     <List
       isShowingDetail={chats.length > 0 ? true : false}
@@ -285,13 +326,14 @@ export default function ChatGPT() {
       throttle={false}
       navigationTitle={"ChatGPT"}
       actions={getActionPanel()}
+      searchBarAccessory={<PromptDropdown promptList={promptList} onPromptChange={onPromptChange} />}
       selectedItemId={selectedChatId || undefined}
       onSelectionChange={(id) => {
         if (id !== selectedChatId) {
           setSelectedChatId(id);
         }
       }}
-      searchBarPlaceholder={chats.length > 0 ? "Ask another question..." : "Ask a question..."}
+      searchBarPlaceholder={"Add Sentence here"}
     >
       {searchText.length === 0 && chats.length === 0 ? (
         initialQuestions.length > 0 ? (
